@@ -26,6 +26,7 @@
             android:name=".ForegroundService"
             android:enabled="true"
             android:exported="true" />
+
     </application>
 
 </manifest>

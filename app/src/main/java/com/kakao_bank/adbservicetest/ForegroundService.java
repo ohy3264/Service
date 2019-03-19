@@ -1,26 +1,26 @@
 package com.kakao_bank.adbservicetest;
 
-import android.annotation.TargetApi;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
-import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
-import android.widget.RemoteViews;
 
-/**
- * Created by ohyowan on 2019. 3. 16..
- */
+import static android.app.Notification.DEFAULT_SOUND;
+import static android.app.Notification.DEFAULT_VIBRATE;
 
 public class ForegroundService extends Service {
+    private static final int NOTIFY_ID = 1;
+    public static final String CHANNEL_ID = "channel_default";
+    public static final String CHANNEL_DESCRIPTION = "channel_description";
+    private NotificationManager mNotificationManager;
 
     @Nullable
     @Override
@@ -31,47 +31,65 @@ public class ForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        registerReciver();
         startForegroundService();
         return super.onStartCommand(intent, flags, startId);
     }
 
-    void startForegroundService() {
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
-
-        RemoteViews remoteViews = new RemoteViews(getPackageName(), R.layout.notification_service);
-
-        NotificationCompat.Builder builder;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startMyOwnForeground();
-        } else {
-            startForeground(1, new Notification());
-        }
+    void registerReciver() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("broadcast.receiver.content_update");
+        filter.addAction("broadcast.receiver.service_remove");
+        registerReceiver(receiver, filter);
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
-    private void startMyOwnForeground() {
-        String NOTIFICATION_CHANNEL_ID = getPackageName();
-        String channelName = "Background Service";
-        NotificationChannel chan = new NotificationChannel(NOTIFICATION_CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_NONE);
-        chan.setLightColor(Color.BLUE);
-        chan.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
-        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        assert manager != null;
-        manager.createNotificationChannel(chan);
+    private final BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action.equals("broadcast.receiver.content_update")) {
+                updateNotification();
+            } else if (action.equals("broadcast.receiver.service_remove")) {
+                cancelForegroundService();
+            }
+        }
+    };
 
-        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID);
-        Notification notification = notificationBuilder.setOngoing(true)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("App is running in background")
-                .setPriority(NotificationManager.IMPORTANCE_MAX)
-                .setCategory(Notification.CATEGORY_SERVICE)
-                .build();
-        startForeground(2, notification);
+    void startForegroundService() {
+        startForeground(NOTIFY_ID, generateNotification("create"));
+    }
+
+    void cancelForegroundService() {
+        stopForeground(false);
+        mNotificationManager.cancel(NOTIFY_ID);
+    }
+
+    private Notification generateNotification(String text) {
+        NotificationCompat.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel notificationChannel = new NotificationChannel(CHANNEL_ID, CHANNEL_DESCRIPTION, NotificationManager.IMPORTANCE_HIGH);
+            ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).createNotificationChannel(notificationChannel);
+            builder = new NotificationCompat.Builder(this, CHANNEL_ID);
+        } else {
+            builder = new NotificationCompat.Builder(this);
+        }
+
+        builder.setSmallIcon(R.mipmap.ic_launcher)
+                .setContentText(text)
+                .setDefaults(DEFAULT_SOUND | DEFAULT_VIBRATE)
+                .setPriority(NotificationManager.IMPORTANCE_MAX);
+
+        return builder.build();
+    }
+
+    private void updateNotification() {
+        String text = "Some text that will update the notification";
+        Notification notification = generateNotification(text);
+        mNotificationManager.notify(NOTIFY_ID, notification);
     }
 }
